@@ -55,4 +55,34 @@ The first instruction is
 
 >push ebp  
 
-This requires an understanding of how stack works in binary. Recall that stack is an area of memory at the bottom. Execute `info proc mappings`
+This requires an understanding of how stack works in binary. Recall that stack is an area of memory at the bottom. Execute `info proc mappings` to map out the memory. Looking at the bottom of the outputted map shows us that the stack is from *0xbffeb000* to *0xc0000000*.  
+Note that the stack begins from the bottom, moving up as data is added. In this case, the bottom of the stack is at 8 bits before the *0xc0000000* end pointer, so *0xbffffff8*. Input `x/wx $esp` to examine the memory for $esp. Sure enough, the memory value for esp is the end of the stack buffer (approximately), *0xbffff79c* ***(Not sure why the stack pointer doesn't point to the exact address...)***  
+  
+Now, back to the instruction line. ebp refers to a *base pointer* and it contains an address pointing to somewhere in the stack. Whatever this address is, it seems pretty important, as it is being saved into the stack (which is basically being saved).  
+  
+The last instruction is:
+
+>leave
+
+Intel instruction reference tells us that *leave* is basically mov esp, ebp (set esp to ebp value), and pop ebp.   
+***So, the instruction set is basically symmetrical.*** We first in the beginning push ebp, and set ebp to esp value and do the reverse in the end. This phenomenon is intuitive, as the entire binary must remember where to go back to in the binary after it is done executing the contents of the main section binary. The original 'next' instruction is saved in the stack, and all other information regarding the main function is stacked on top of that information during execution. To go back to the prior part of the binary, it pops the original location from the stack and goes to the given address.  
+The next line,
+
+>and esp, 0xfffffff0
+
+which essentially ***masks*** esp and sets the last 4 bits to 0. This is done for formatting, and not essential in our solution. Next, the line is
+
+>sub esp, 0x60
+
+is subtracting a certain number from esp, having the stack pointer point a couple bytes lower than the base pointer. Then,
+
+>mov DWORD PTR [esp+0x5c], 0x0
+
+sets 0 to the stack with offset 0x5c which is what goes on for the `modified = 0;` code.  
+  
+***SO, THROUGH ALL OF THIS:*** The main binary moves the base pointer to where the stack pointer was referring to. Subtracting a certain number from the stack pointer moves it up, and creates a ***stack frame***, where local data of the main function can be handled (like our 0 variable). The reason the stack frame is so big is because we allocated a lot of space for it in the code.  
+Instructions from there revolve around passing more parameters in the stack to call other functions, and a comparison, followed by a branch to handle each case.  
+
+### Observing Execution Again/Automating Commands
+
+Remove the currently-set breaks for main using `del`, and then set new break points at both before/after the gets command. This time, after setting the break points, we set automatic commands to execute on each break point. Input `define hook-stop` to initialize that, and set `info registers` to show registers, `x/24wx $esp` to show the stack, and `x/2i $eip` to print the next 2 instructions, and finish with `end`. After executing, continue with `c` and with it, input a lot of capital As. After inputting it, the break point after execution of gets will show the stack partially filled with *0x41414141*s, which are all ones that we just entered. Checking the value of memory where the 0 variable is stored with `x/wx $esp+0x5c`, we see that the value is still 0x00000000. We also see that there are 4 full rows that A needs to fill in order to reach that part, which is basically matches the 64 elements we need to exceed to input into the gets to over flow the 0 variable. Inputting that many characters seems that the 0 variable contents are changed.
